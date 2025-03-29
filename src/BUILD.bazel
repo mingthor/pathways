@@ -1,0 +1,5 @@
+cc_binary(
+  name = "hello_world",
+  deps = ["@abseil-cpp//absl/strings"],
+  srcs = ["hello_world.cc"],
+)
