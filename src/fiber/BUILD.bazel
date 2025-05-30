@@ -1,0 +1,42 @@
+# BUILD file for the Fiber ThreadPool project
+
+# Define a C++ library for the core fiber and thread pool components.
+cc_library(
+    name = "fiber_lib",
+    srcs = [
+        "fiber.cc",
+        "fiber_scheduler.cc",
+        "fiber_sync.cc",
+        "thread_pool.cc",
+    ],
+    hdrs = [
+        "fiber_types.h",
+        "fiber.h",
+        "fiber_scheduler.h",
+        "fiber_sync.h",
+        "thread_pool.h",
+    ],
+    deps = [
+        "@abseil-cpp//absl/base:core_headers",
+        "@abseil-cpp//absl/functional:any_invocable",
+        "@abseil-cpp//absl/log:log",
+        "@abseil-cpp//absl/log:initialize",
+        "@abseil-cpp//absl/synchronization",
+        "@abseil-cpp//absl/time",
+    ],
+    copts = ["-std=c++17"], # Or c++14, c++20 depending on your compiler support and preference
+    visibility = ["//visibility:public"],
+)
+
+# Define the example_main executable.
+cc_binary(
+    name = "example_main",
+    srcs = ["example_main.cc"],
+    deps = [
+        ":fiber_lib", # Link against our fiber library
+        "@abseil-cpp//absl/log:log",
+        "@abseil-cpp//absl/log:initialize",
+        "@abseil-cpp//absl/time",
+    ],
+    copts = ["-std=c++17"],
+)
