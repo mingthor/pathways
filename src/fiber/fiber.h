@@ -55,8 +55,8 @@ private:
     std::atomic<State> state_;          // Current state of the fiber.
     absl::AnyInvocable<void()> func_;   // The user-defined function for this fiber (now absl::AnyInvocable).
     jmp_buf context_;                   // Stores the fiber's CPU context.
-    std::unique_ptr<char[]> stack_;     // Unique pointer to the fiber's dedicated stack memory.
     FiberScheduler* scheduler_;         // Pointer back to the scheduler for interactions.
+    std::unique_ptr<char[]> stack_;     // Unique pointer to the fiber's dedicated stack memory.
 };
 
 #endif // FIBER_H_

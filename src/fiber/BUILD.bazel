@@ -40,3 +40,17 @@ cc_binary(
     ],
     copts = ["-std=c++17"],
 )
+
+
+# Define the producer_consumer_main executable.
+cc_binary(
+    name = "producer_consumer_main",
+    srcs = ["producer_consumer_main.cc"],
+    deps = [
+        "@abseil-cpp//absl/log:log",
+        "@abseil-cpp//absl/log:initialize",
+        "@abseil-cpp//absl/time",
+        "@abseil-cpp//absl/synchronization",
+    ],
+    copts = ["-std=c++17"],
+)

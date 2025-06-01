@@ -1,0 +1,10 @@
+# .bazelrc file
+
+# Default build options (e.g., for release builds)
+build --cxxopt=-std=c++17
+
+# Debug configuration
+# To use this, run: bazel build --config=debug //your/package:target
+build:debug --compilation_mode=dbg
+build:dbg --cxxopt="-fno-inline"
+build:dbg --strip=never # To ensure symbols are never stripped
