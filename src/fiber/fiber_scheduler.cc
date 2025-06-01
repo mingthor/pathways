@@ -32,7 +32,11 @@ FiberScheduler::~FiberScheduler() {
 
 void FiberScheduler::Schedule(Fiber *fiber) {
   absl::MutexLock lock(&mu_);
-  fibers_.insert(fiber);
+  // Only initialize context for new fibers
+  if (fibers_.insert(fiber)
+          .second) {  // Returns true if fiber is newly inserted
+    InitializeFiberContext(fiber);
+  }
   ready_fibers_.push_back(fiber);
   fiber->set_state(Fiber::READY);
   ready_fibers_cv_.Signal();
@@ -41,23 +45,23 @@ void FiberScheduler::Schedule(Fiber *fiber) {
 }
 
 void FiberScheduler::Yield() {
+  LOG(ERROR) << "Yield called from FiberScheduler.";
   Fiber *caller_fiber = current_fiber;
   if (caller_fiber == nullptr) {
     LOG(ERROR) << "Yield called from non-fiber context!";
     return;
   }
 
-  LOG(ERROR) << "Fiber " << caller_fiber->id() << " yielding.";
+  LOG(ERROR) << "Fiber " << caller_fiber->id() << " yielding. Caller fiber state: "
+             << caller_fiber->state();
 
-  if (setjmp(*caller_fiber->context()) == 0) {
-    if (caller_fiber->state() == Fiber::RUNNING) {
-      caller_fiber->set_state(Fiber::READY);
-      Schedule(caller_fiber);
-    }
-    SwitchToSchedulerContext();
-  } else {
-    LOG(ERROR) << "Fiber " << caller_fiber->id() << " resumed.";
+  if (caller_fiber->state() == Fiber::RUNNING) {
+    caller_fiber->set_state(Fiber::READY);
+    Schedule(caller_fiber);
   }
+  SwitchToSchedulerContext();
+  
+  LOG(ERROR) << "Fiber " << caller_fiber->id() << " resumed.";
 }
 
 void FiberScheduler::Block() {
@@ -79,57 +83,79 @@ void FiberScheduler::Unblock(Fiber *fiber) {
 
 Fiber *FiberScheduler::GetCurrentFiber() const { return current_fiber; }
 
+void FiberScheduler::InitializeFiberContext(Fiber *fiber) {
+  // Get the stack base
+  char *stack_base = fiber->stack_base();
+  
+  // Initialize the context
+  ucontext_t* ctx = fiber->context();
+  getcontext(ctx);  // Initialize ctx with current context
+
+  // Set up the new context's stack
+  ctx->uc_stack.ss_sp = stack_base;
+  ctx->uc_stack.ss_size = kFiberStackSize;
+  ctx->uc_stack.ss_flags = 0;
+  ctx->uc_link = nullptr;  // No link context - fiber will call Yield when done
+
+  // Set up the entry point function
+  makecontext(ctx, 
+              (void (*)())&Fiber::RunEntryPoint,  // Entry point
+              0);  // No arguments
+
+  LOG(ERROR) << "Initialized context for Fiber " << fiber->id();
+}
+
 void FiberScheduler::WorkerThreadLoop() {
-  jmp_buf thread_context;
-  thread_contexts_[std::this_thread::get_id()] = &thread_context;
+  auto thread_context = std::make_unique<ucontext_t>();
+  getcontext(thread_context.get());
+  thread_contexts_[std::this_thread::get_id()] = thread_context.get();
 
   LOG(ERROR) << "Worker thread " << std::this_thread::get_id() << " started.";
 
-  if (setjmp(thread_context) == 0) {
-    while (!shutdown_.load()) {
-      Fiber *fiber_to_run = nullptr;
-      {
-        absl::MutexLock lock(&mu_);
-        while (ready_fibers_.empty() && !shutdown_.load()) {
-          ready_fibers_cv_.Wait(&mu_);
-        }
-        if (shutdown_.load()) {
-          break;
-        }
-        fiber_to_run = ready_fibers_.front();
-        ready_fibers_.pop_front();
+  while (!shutdown_.load()) {
+    Fiber *fiber_to_run = nullptr;
+    {
+      absl::MutexLock lock(&mu_);
+      while (ready_fibers_.empty() && !shutdown_.load()) {
+        ready_fibers_cv_.Wait(&mu_);
       }
-
-      if (fiber_to_run) {
-        LOG(ERROR) << "Worker thread " << std::this_thread::get_id()
-                   << " picked Fiber " << fiber_to_run->id()
-                   << ". State: " << fiber_to_run->state();
-        SwitchToFiber(fiber_to_run);
+      if (shutdown_.load()) {
+        break;
       }
+      fiber_to_run = ready_fibers_.front();
+      ready_fibers_.pop_front();
     }
-  } else {
-    // This else block is where fibers longjmp back to when they
-    // yield/block/terminate. The worker thread will then loop back to the
-    // `while` condition.
+
+    if (fiber_to_run) {
+      LOG(ERROR) << "Worker thread " << std::this_thread::get_id()
+                 << " picked Fiber " << fiber_to_run->id()
+                 << ". State: " << fiber_to_run->state();
+      SwitchToFiber(fiber_to_run);
+    }
   }
+
   LOG(ERROR) << "Worker thread " << std::this_thread::get_id() << " exiting.";
 }
 
 void FiberScheduler::SwitchToFiber(Fiber *fiber) {
   current_fiber = fiber;
   fiber->set_state(Fiber::RUNNING);
-
+  
+  ucontext_t* current_ctx = thread_contexts_[std::this_thread::get_id()];
+  
   LOG(ERROR) << "Switching to Fiber " << fiber->id() << ".";
-  longjmp(*fiber->context(), 1);
-  LOG(ERROR) << "Switched to Fiber " << fiber->id() << ".";
+  swapcontext(current_ctx, fiber->context());
+  LOG(ERROR) << "Switched back from Fiber " << fiber->id() << ".";
 }
 
 void FiberScheduler::SwitchToSchedulerContext() {
-  jmp_buf *thread_ctx = thread_contexts_[std::this_thread::get_id()];
+  ucontext_t* thread_ctx = thread_contexts_[std::this_thread::get_id()];
   if (thread_ctx == nullptr) {
     LOG(FATAL) << "Scheduler context not found for current thread!";
   }
+  
   LOG(ERROR) << "Switching back to scheduler context.";
+  Fiber* fiber = current_fiber;
   current_fiber = nullptr;
-  longjmp(*thread_ctx, 1);
+  swapcontext(fiber->context(), thread_ctx);
 }

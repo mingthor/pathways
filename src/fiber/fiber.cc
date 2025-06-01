@@ -9,9 +9,6 @@ std::atomic<int> Fiber::next_id_ = 0;
 // Define the thread_local current_fiber.
 thread_local class Fiber *current_fiber = nullptr;
 
-// Define a small stack size for demonstration.
-constexpr size_t kFiberStackSize = 128 * 1024;  // 128 KB
-
 Fiber::Fiber(absl::AnyInvocable<void()> func, FiberScheduler *scheduler)
     : id_(next_id_.fetch_add(1)),
       state_(READY),
@@ -29,7 +26,7 @@ Fiber::State Fiber::state() const { return state_.load(); }
 
 void Fiber::set_state(State s) { state_.store(s); }
 
-jmp_buf *Fiber::context() { return &context_; }
+ucontext_t *Fiber::context() { return &context_; }
 
 char *Fiber::stack_base() { return stack_.get(); }
 
@@ -38,10 +35,17 @@ void Fiber::RunEntryPoint() {
   state_ = RUNNING;
 
   LOG(ERROR) << "Fiber " << id_ << " entering RunEntryPoint.";
-  func_();  // Execute the user-provided fiber function
+  
+  try {
+    // Execute the user's function exactly once
+    func_();  // The moved AnyInvocable is valid here
+  } catch (const std::exception& e) {
+    LOG(ERROR) << "Fiber " << id_ << " threw exception: " << e.what();
+  }
 
   state_ = TERMINATED;
   LOG(ERROR) << "Fiber " << id_ << " finished, state: TERMINATED.";
 
+  // Final yield to let scheduler know we're done
   scheduler_->Yield();
 }

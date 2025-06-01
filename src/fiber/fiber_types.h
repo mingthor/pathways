@@ -13,4 +13,7 @@ class FiberConditionVariable;
 // This is crucial for fibers to interact with the scheduler (e.g., to yield or block).
 extern thread_local class Fiber* current_fiber;
 
+// Define a small stack size for demonstration.
+constexpr size_t kFiberStackSize = 128 * 1024;  // 128 KB
+
 #endif // FIBER_TYPES_H_

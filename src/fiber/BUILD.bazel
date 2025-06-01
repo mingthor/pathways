@@ -28,6 +28,22 @@ cc_library(
     visibility = ["//visibility:public"],
 )
 
+# Define the unit test executable.
+cc_test(
+    name = "fiber_test",
+    srcs = ["fiber_test.cc"],
+    deps = [
+        ":fiber_lib", # Link against our fiber library
+        "@abseil-cpp//absl/log:log",
+        "@abseil-cpp//absl/log:initialize",
+        "@abseil-cpp//absl/time",
+        "@googletest//:gtest_main", # For gtest framework and main function
+        "@googletest//:gtest",      # For gtest assertions
+    ],
+    copts = ["-std=c++17"],
+)
+
+
 # Define the example_main executable.
 cc_binary(
     name = "example_main",

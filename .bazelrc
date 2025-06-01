@@ -7,4 +7,17 @@ build --cxxopt=-std=c++17
 # To use this, run: bazel build --config=debug //your/package:target
 build:debug --compilation_mode=dbg
 build:dbg --cxxopt="-fno-inline"
-build:dbg --strip=never # To ensure symbols are never stripped
+build:dbg --strip=never # To ensure symbols are never 
+build:dbg --copt -O1
+build:dbg --copt -g # debug symbols
+build:dbg --copt -fno-omit-frame-pointer
+
+# AddressSanitizer configuration
+# To use this, run: bazel build --config=asan //your/package:target
+build:asan --strip=never
+build:asan --copt -fsanitize=address
+build:asan --copt -DADDRESS_SANITIZER
+build:asan --copt -O1
+build:asan --copt -g # debug symbols
+build:asan --copt -fno-omit-frame-pointer
+build:asan --linkopt -fsanitize=address
