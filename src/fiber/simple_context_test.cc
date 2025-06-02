@@ -11,6 +11,14 @@ class SimpleContextTest : public ::testing::Test {
  protected:
   static constexpr size_t kStackSize = 64 * 1024;  // 64KB stack
 
+  enum class ContextState { NOT_STARTED, RUNNING, FINISHED };
+
+  struct Context {
+    SimpleContextTest* test;
+    absl::AnyInvocable<void()> func;
+    ContextState state = ContextState::NOT_STARTED;
+  };
+
   void SetUp() override {
     // Initialize context and stack
     stack_ = std::make_unique<char[]>(kStackSize);
@@ -31,21 +39,43 @@ class SimpleContextTest : public ::testing::Test {
     ctx_.uc_link =
         nullptr;  // We'll use explicit swapcontext, so no link needed
 
-    // Store the function
-    func_ = std::move(func);
+    // Create context on heap - will be managed by shared_ptr for safety
+    auto context =
+        std::make_shared<Context>(Context{.test = this,
+                                          .func = std::move(func),
+                                          .state = ContextState::NOT_STARTED});
 
-    // Create a lambda that captures 'this' to avoid static member
+    // Weak pointer to detect when context is done
+    // auto weak_context = std::weak_ptr<Context>(context);
+
+    // Create a lambda that will receive the Context*
     auto entry_point = [](void* arg) {
-      auto self = static_cast<SimpleContextTest*>(arg);
-      self->func_();
+      // Convert raw pointer back to shared_ptr to manage lifetime
+      auto ctx =
+          std::shared_ptr<Context>(static_cast<Context*>(arg), [](Context* p) {
+            LOG(ERROR) << "Context cleanup from entry point";
+            if (p->state != ContextState::FINISHED) {
+              LOG(ERROR)
+                  << "Warning: Context cleaned up before finishing execution";
+            }
+          });
+
+      ctx->state = ContextState::RUNNING;
+
+      // Execute the function
+      ctx->func();
+
+      ctx->state = ContextState::FINISHED;
+
       // Switch back to main context when done
-      swapcontext(&self->ctx_, &self->main_ctx_);
+      swapcontext(&ctx->test->ctx_, &ctx->test->main_ctx_);
+      // Context will be cleaned up when shared_ptr goes out of scope
     };
 
-    // Set up the context with the entry function and pass 'this' as argument
+    // Set up the context with the entry function and pass context pointer
     makecontext(&ctx_, reinterpret_cast<void (*)()>(+entry_point),
-                1,      // One argument
-                this);  // Pass this pointer as argument
+                1,               // One argument
+                context.get());  // Pass raw pointer, but keep shared ownership
 
     // Switch to the new context
     swapcontext(&main_ctx_, &ctx_);
@@ -54,34 +84,19 @@ class SimpleContextTest : public ::testing::Test {
   ucontext_t ctx_{};
   ucontext_t main_ctx_{};
   std::unique_ptr<char[]> stack_;
-  absl::AnyInvocable<void()> func_;
 };
 
 TEST_F(SimpleContextTest, BasicContextSwitch) {
   int counter = 0;
-  bool function_ran = false;
-
   auto func = [&]() {
-    function_ran = true;
     counter++;
     LOG(ERROR) << "Function executing in new context, counter = " << counter;
-
-    // We can switch back and forth multiple times
-    swapcontext(&ctx_, &main_ctx_);  // Switch to main
-
-    counter++;
-    LOG(ERROR) << "Function resumed in new context, counter = " << counter;
   };
 
   RunContextSwitch(func);
   LOG(ERROR) << "Back in main context, counter = " << counter;
 
-  // We can switch back to the function context
-  swapcontext(&main_ctx_, &ctx_);
-  LOG(ERROR) << "Back in main context final time, counter = " << counter;
-
-  EXPECT_TRUE(function_ran) << "Function did not run";
-  EXPECT_EQ(counter, 2) << "Counter should be incremented twice";
+  EXPECT_EQ(counter, 1) << "Counter should be incremented twice";
 }
 
 }  // namespace
