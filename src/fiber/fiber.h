@@ -1,9 +1,10 @@
 #ifndef FIBER_H_
 #define FIBER_H_
 
+#include <ucontext.h>
+
 #include <atomic>
 #include <memory>
-#include <ucontext.h>
 
 #include "absl/functional/any_invocable.h"
 #include "fiber_types.h"  // Includes FiberScheduler forward declaration and current_fiber extern
@@ -47,8 +48,9 @@ class Fiber {
   // Get a pointer to the base of the fiber's dedicated stack.
   char* stack_base();
 
-  // The actual entry point for the fiber. This function is called via makecontext.
-  // It sets up the thread-local current_fiber and executes the user-provided function.
+  // The actual entry point for the fiber. This function is called via
+  // makecontext. It sets up the thread-local current_fiber and executes the
+  // user-provided function.
   void RunEntryPoint();
 
  private:
@@ -57,8 +59,7 @@ class Fiber {
       next_id_;  // Static atomic counter for generating unique IDs.
   std::atomic<State> state_;         // Current state of the fiber.
   absl::AnyInvocable<void()> func_;  // The user-defined function for this fiber
-                                     // (now absl::AnyInvocable).
-  ucontext_t context_;               // Changed from jmp_buf to ucontext_t
+  ucontext_t context_;
   FiberScheduler*
       scheduler_;  // Pointer back to the scheduler for interactions.
   std::unique_ptr<char[]>

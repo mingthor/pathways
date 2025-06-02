@@ -70,3 +70,28 @@ cc_binary(
     ],
     copts = ["-std=c++17"],
 )
+
+# Define a new test for context switching
+cc_test(
+    name = "context_switching_test",
+    srcs = ["context_switching_test.cc"],
+    deps = [
+        "@abseil-cpp//absl/log:log",
+        "@googletest//:gtest_main",
+        "@googletest//:gtest",
+    ],
+    copts = ["-std=c++17"],
+)
+
+# Define a simple context test
+cc_test(
+    name = "simple_context_test",
+    srcs = ["simple_context_test.cc"],
+    deps = [
+        "@abseil-cpp//absl/functional:any_invocable",
+        "@abseil-cpp//absl/log:log",
+        "@googletest//:gtest_main",
+        "@googletest//:gtest",
+    ],
+    copts = ["-std=c++17"],
+)

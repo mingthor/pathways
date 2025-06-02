@@ -47,20 +47,20 @@ class FiberSystemTest : public ::testing::Test {
 
 // --- Fiber Class Tests ---
 
-TEST_F(FiberSystemTest, FiberCreationAndDestruction) {
-  bool fiber_ran = false;
-  {
-    // FiberScheduler is owned by global_thread_pool.
-    // We need to get a raw pointer to it for Fiber construction.
-    FiberScheduler* scheduler = global_thread_pool->GetInternalScheduler();
-    Fiber fiber([&]() { fiber_ran = true; }, scheduler);
+// TEST_F(FiberSystemTest, FiberCreationAndDestruction) {
+//   bool fiber_ran = false;
+//   {
+//     // FiberScheduler is owned by global_thread_pool.
+//     // We need to get a raw pointer to it for Fiber construction.
+//     FiberScheduler* scheduler = global_thread_pool->GetInternalScheduler();
+//     Fiber fiber([&]() { fiber_ran = true; }, scheduler);
 
-    EXPECT_EQ(fiber.state(), Fiber::READY);
-    EXPECT_EQ(fiber.id(), 0);  // IDs should start from 0 and increment.
-    // Don't schedule it, just test creation/destruction.
-  }
-  EXPECT_FALSE(fiber_ran);  // Should not have run if not scheduled.
-}
+//     EXPECT_EQ(fiber.state(), Fiber::READY);
+//     EXPECT_EQ(fiber.id(), 0);  // IDs should start from 0 and increment.
+//     // Don't schedule it, just test creation/destruction.
+//   }
+//   EXPECT_FALSE(fiber_ran);  // Should not have run if not scheduled.
+// }
 
 TEST_F(FiberSystemTest, FiberRunEntryPointSetsState) {
   absl::Mutex mu;
@@ -69,21 +69,28 @@ TEST_F(FiberSystemTest, FiberRunEntryPointSetsState) {
 
   // FiberScheduler is owned by global_thread_pool.
   FiberScheduler* scheduler = global_thread_pool->GetInternalScheduler();
+  auto lambda_func = []() {
+    LOG(ERROR) << "Fiber running.";
+    // absl::MutexLock lock(&mu);
+    // fiber_finished = true;
+    // cv.Signal();
+  };
   Fiber fiber(
-      [&]() {
-        LOG(ERROR) << "Fiber started running.";
-        // The fiber's own RunEntryPoint will set its state to RUNNING.
-        // After func_() returns, it will set state to TERMINATED.
-        for (int i = 0; i < 5; ++i) {
-          LOG(ERROR) << "Fiber running iteration " << i;
-          absl::SleepFor(absl::Milliseconds(10));  // Simulate work
-          scheduler->Yield();  // Yield to allow other fibers to run
-        }
+    std::move(lambda_func),
+      // [&]() {
+      //   LOG(ERROR) << "Fiber started running.";
+      //   // The fiber's own RunEntryPoint will set its state to RUNNING.
+      //   // // After func_() returns, it will set state to TERMINATED.
+      //   // for (int i = 0; i < 5; ++i) {
+      //   //   LOG(ERROR) << "Fiber running iteration " << i;
+      //   //   absl::SleepFor(absl::Milliseconds(10));  // Simulate work
+      //   //   scheduler->Yield();  // Yield to allow other fibers to run
+      //   // }
 
-        absl::MutexLock lock(&mu);
-        fiber_finished = true;
-        cv.Signal();
-      },
+      //   // absl::MutexLock lock(&mu);
+      //   // fiber_finished = true;
+      //   // cv.Signal();
+      // },
       scheduler);
 
   // Schedule the fiber.

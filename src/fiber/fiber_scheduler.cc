@@ -33,8 +33,7 @@ FiberScheduler::~FiberScheduler() {
 void FiberScheduler::Schedule(Fiber *fiber) {
   absl::MutexLock lock(&mu_);
   // Only initialize context for new fibers
-  if (fibers_.insert(fiber)
-          .second) {  // Returns true if fiber is newly inserted
+  if (fibers_.insert(fiber).second) {
     InitializeFiberContext(fiber);
   }
   ready_fibers_.push_back(fiber);
@@ -52,15 +51,15 @@ void FiberScheduler::Yield() {
     return;
   }
 
-  LOG(ERROR) << "Fiber " << caller_fiber->id() << " yielding. Caller fiber state: "
-             << caller_fiber->state();
+  LOG(ERROR) << "Fiber " << caller_fiber->id()
+             << " yielding. Caller fiber state: " << caller_fiber->state();
 
   if (caller_fiber->state() == Fiber::RUNNING) {
     caller_fiber->set_state(Fiber::READY);
     Schedule(caller_fiber);
   }
   SwitchToSchedulerContext();
-  
+
   LOG(ERROR) << "Fiber " << caller_fiber->id() << " resumed.";
 }
 
@@ -86,9 +85,9 @@ Fiber *FiberScheduler::GetCurrentFiber() const { return current_fiber; }
 void FiberScheduler::InitializeFiberContext(Fiber *fiber) {
   // Get the stack base
   char *stack_base = fiber->stack_base();
-  
+
   // Initialize the context
-  ucontext_t* ctx = fiber->context();
+  ucontext_t *ctx = fiber->context();
   getcontext(ctx);  // Initialize ctx with current context
 
   // Set up the new context's stack
@@ -98,9 +97,9 @@ void FiberScheduler::InitializeFiberContext(Fiber *fiber) {
   ctx->uc_link = nullptr;  // No link context - fiber will call Yield when done
 
   // Set up the entry point function
-  makecontext(ctx, 
+  makecontext(ctx,
               (void (*)())&Fiber::RunEntryPoint,  // Entry point
-              0);  // No arguments
+              0);                                 // No arguments
 
   LOG(ERROR) << "Initialized context for Fiber " << fiber->id();
 }
@@ -140,22 +139,22 @@ void FiberScheduler::WorkerThreadLoop() {
 void FiberScheduler::SwitchToFiber(Fiber *fiber) {
   current_fiber = fiber;
   fiber->set_state(Fiber::RUNNING);
-  
-  ucontext_t* current_ctx = thread_contexts_[std::this_thread::get_id()];
-  
+
+  ucontext_t *current_ctx = thread_contexts_[std::this_thread::get_id()];
+
   LOG(ERROR) << "Switching to Fiber " << fiber->id() << ".";
   swapcontext(current_ctx, fiber->context());
   LOG(ERROR) << "Switched back from Fiber " << fiber->id() << ".";
 }
 
 void FiberScheduler::SwitchToSchedulerContext() {
-  ucontext_t* thread_ctx = thread_contexts_[std::this_thread::get_id()];
+  ucontext_t *thread_ctx = thread_contexts_[std::this_thread::get_id()];
   if (thread_ctx == nullptr) {
     LOG(FATAL) << "Scheduler context not found for current thread!";
   }
-  
+
   LOG(ERROR) << "Switching back to scheduler context.";
-  Fiber* fiber = current_fiber;
+  Fiber *fiber = current_fiber;
   current_fiber = nullptr;
   swapcontext(fiber->context(), thread_ctx);
 }

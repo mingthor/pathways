@@ -1,5 +1,6 @@
 #include "fiber.h"
 
+#include <cstring>            // For memset
 #include "absl/log/log.h"     // For logging
 #include "fiber_scheduler.h"  // For FiberScheduler methods
 
@@ -15,6 +16,8 @@ Fiber::Fiber(absl::AnyInvocable<void()> func, FiberScheduler *scheduler)
       func_(std::move(func)),
       scheduler_(scheduler),
       stack_(std::make_unique<char[]>(kFiberStackSize)) {
+  // Zero-initialize the context
+  std::memset(&context_, 0, sizeof(context_));
   LOG(ERROR) << "Fiber " << id_ << " created.";
 }
 
